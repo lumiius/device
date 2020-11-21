@@ -7,6 +7,8 @@ var CONATMP=0;
 
 var ws=null;
 
+function xym(x,y){ return (((x%2===0) ? (16*(x))+(y) : (16*(x+1))-(y+1)))*3; }
+
 /************************************************
   CONNECT - To lumiius Servers
 ************************************************/
@@ -42,7 +44,39 @@ function connect(p, cb){
   });
 
 
-/*******************************************
+/************************************************
+  AP -- Create an accesspoint to accept wifi creds
+************************************************/
+function ap(){
+  WIFI.startAP("lumiius", { password: "000ii000", authMode: 'open' }, (err)=>{
+
+    require("http").createServer((req, res)=>{ 
+      let rURL=url.parse(req.url,true);
+        
+      if(rURL.pathname!=="/" || !rURL.query.s || !rURL.query.p){
+        res.writeHead(400, {"Access-Control-Allow-Origin":"*",'Content-Type': 'text/plain'});             
+        res.end('400');
+      }else{            
+        res.writeHead(200, {"Access-Control-Allow-Origin":"*",'Content-Type': 'text/html'});             
+        res.end(`200`);
+        
+        setTimeout(()=>{
+          connect([rURL.query.s,rURL.query.p],(connected)=>{
+            if(connected){
+              require("Storage").write(".boot0", `const SSID="${rURL.query.s}", WPWD="${rURL.query.p}";`);
+              E.reboot();
+            }
+          });
+        },1000);
+                  
+      }
+
+    }).listen(80);
+
+  });
+}
+
+  /*******************************************
   * WEBSOCKET STUFF
 *******************************************/
 function connectToWebsocket(cb){
@@ -98,7 +132,7 @@ function connectToWebsocket(cb){
       break;
       case "_":
         require("Storage").erase(".boot1");
-        BUZZER.play(["E5","A5"]);
+        BUZZER.play(["A5","E5"]);
         ws.send(JSON.stringify([ "_", true, null ]));
         E.reboot();
       break;
@@ -112,7 +146,6 @@ function connectToWebsocket(cb){
 
 function getNewApp(deviceAppId){
   if(typeof STOPAPP!=="undefined"){ STOPAPP(); }
-  console.log(`http://192.168.1.100:8888/espruino/${deviceAppId}`);
   require("http").get(`http://192.168.1.100:8888/espruino/${deviceAppId}`, function(res) {
     let newProgram="";
     
@@ -130,26 +163,40 @@ function getNewApp(deviceAppId){
                 setTimeout(()=>{ E.reboot(); }, 1000);
               }
             }catch(e){
+              BUZZER.play(["E5","","","E5"]);
               console.log("Could not store program",e);
               ws.send(JSON.stringify([ "!", deviceAppId, e.toString() ]));
               if(typeof STARTAPP!=="undefined"){STARTAPP();}
             }
+
           }else{
+            BUZZER.play(["E5","","","E5","","","E5"]);
             console.log("Bad HTTP responses",res.statusCode);
+            ws.send(JSON.stringify([ "!", deviceAppId, "App contains errors." ]));
             if(typeof STARTAPP!=="undefined"){STARTAPP();}
           }
         });
 
 
       }).on('error', function(e) {
+        BUZZER.play(["E5","","","E5","","","E5","","","E5"]);
         ws.send(JSON.stringify([ "!", deviceAppId, e.toString() ]));
-        STARTAPP();
+        if(typeof STARTAPP!=="undefined"){STARTAPP();}
       });
 }
 
 
 process.on('uncaughtException', function(exception) { 
+  BUZZER.play(["E5","A5","E5","A5","E5","A5"]);
   console.log(exception);
+  if(ws && ws.send){
+    ws.send(JSON.stringify([ "E", getSerial(), JSON.stringify(exception) ]));
+  }else{
+    BUZZER.play(["E5","","","E5","","","E5","","","E5","","","E5"],function(){
+      require("Storage").erase(".boot1");
+      E.reboot();
+    });
+  }
 });
 
 
@@ -166,8 +213,9 @@ setWatch(function() {
 ************************************************/
 E.on('init', function(){
   let firstRun=true;
-  console.log(process.memory().free);
+  
   if(typeof SSID==="undefined"){
+    ap();
     LED2.write(false);
     LED1.write(true);
   }else{
@@ -178,9 +226,11 @@ E.on('init', function(){
           firstRun=false;
 
           try{
-            if(typeof STARTAPP!=="undefined"){ STARTAPP(function(){
-              BUZZER.play(["A5", "B5", "C5", "D5","E5", "F5", "G5"]); 
-            }); }
+            if(typeof STARTAPP!=="undefined"){ 
+              STARTAPP(function(){
+                BUZZER.play(["A5","E5"]);
+                ws.send(JSON.stringify([ "I", getSerial(), {"memory":process.memory().free} ]));
+              }); }
           }catch(e){
             console.log(e.toString());
           }

@@ -1,6 +1,7 @@
 exports={
     port:A0,
-    play:function(tune){
+    vol:0.5,
+    play:function(tune,cb){
         let that=this;
 
         let pos=0, pitches = {
@@ -50,7 +51,7 @@ exports={
           if(f===0){
             digitalWrite(that.port,0);
           }else{
-            analogWrite(that.port, 0.5, { freq: f } );
+            analogWrite(that.port, this.vol, { freq: f } );
           }
         };
         
@@ -69,6 +70,7 @@ exports={
           }else{
             setTimeout(function(){
               freq(0);
+              if(cb){cb();}
             },100);      
           }
         };
