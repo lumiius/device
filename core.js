@@ -1,6 +1,6 @@
 const PIXEL=require("neopixel"),
       WIFI = require("Wifi"),
-      BUZZER=require('http://192.168.1.100/assets/device/buzzer.js');
+      BUZZER=require('https://raw.githubusercontent.com/lumiius/device/master/libs/buzzer.js');
       BUZZER.port=A0;
 
 var CONATMP=0;
@@ -84,10 +84,9 @@ function connectToWebsocket(cb){
   
   if(CONATMP>10){ E.reboot(); }
   
-  ws = new require("ws")("192.168.1.100",{
+  ws = new require("ws")("api.lumiius.com",{
       path: '/',
-      origin: 'Espruino',
-      port:8888,
+      origin: 'Espruino',      
       headers:{ "device":getSerial() }
   });
 
@@ -145,8 +144,9 @@ function connectToWebsocket(cb){
 }
 
 function getNewApp(deviceAppId){
-  if(typeof STOPAPP!=="undefined"){ STOPAPP(); }
-  require("http").get(`http://192.168.1.100:8888/espruino/${deviceAppId}`, function(res) {
+  function _getNewApp(deviceAppId){
+    //HTTPS is available but for some reason calling https servers will sometimes result in memory errors. So for now, just using http.    
+    require("http").get(`http://api.lumiius.com/espruino/${deviceAppId}`, function(res) {
     let newProgram="";
     
       res.on('data', function(data) {  newProgram+=data;  });
@@ -163,6 +163,7 @@ function getNewApp(deviceAppId){
                 setTimeout(()=>{ E.reboot(); }, 1000);
               }
             }catch(e){
+              console.log("catch",e);
               BUZZER.play(["E5","","","E5"]);
               console.log("Could not store program",e);
               ws.send(JSON.stringify([ "!", deviceAppId, e.toString() ]));
@@ -179,10 +180,20 @@ function getNewApp(deviceAppId){
 
 
       }).on('error', function(e) {
+        console.log("http error",e);
         BUZZER.play(["E5","","","E5","","","E5","","","E5"]);
         ws.send(JSON.stringify([ "!", deviceAppId, e.toString() ]));
         if(typeof STARTAPP!=="undefined"){STARTAPP();}
       });
+  }
+
+  if(typeof STOPAPP!=="undefined"){
+    STOPAPP(function(){ _getNewApp(deviceAppId); });
+  }else{
+    _getNewApp(deviceAppId);
+  }
+  
+  
 }
 
 
